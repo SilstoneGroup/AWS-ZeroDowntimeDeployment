@@ -1,7 +1,7 @@
 import argparse
 import boto3
 import logging
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, EndpointConnectionError
 
 credentials_path = "~/.aws/credentials"
 region_path = "~/.aws/config"
@@ -10,7 +10,7 @@ region_path = "~/.aws/config"
 # for security this is a BIG BIG NO!!!! please create config on the
 # above paths for region and credentials or use environment variables
 
-region = "sample-region"                                       # for now assuming a region e.g us-west-1
+region = "sample-region"                                # for now assuming a region e.g us-west-1
 access_id = "sample-access-id"
 access_key = "sample-access-key"
 
@@ -19,11 +19,14 @@ access_key = "sample-access-key"
 
 class zeroDowntimeDeploy(object):
     def __init__(self):
-        self.client = boto3.client('ec2', region_name=region, aws_access_key_id=access_id, aws_secret_access_key=access_key)
-        self.elb = boto3.client('elbv2', region_name=region, aws_access_key_id=access_id, aws_secret_access_key=access_key)
-        self.vpc = ""
-        self.credentials_path = credentials_path
-        # self.avaibility_zones = []
+        try:
+            self.client = boto3.client('ec2', region_name=region, aws_access_key_id=access_id, aws_secret_access_key=access_key)
+            self.elb = boto3.client('elbv2', region_name=region, aws_access_key_id=access_id, aws_secret_access_key=access_key)
+            self.vpc = ""
+            self.credentials_path = credentials_path
+            # self.avaibility_zones = []
+        except Exception as e:
+            log.error("Region/Access ID/Access Key is invalid : " + str(e))
 
     def image_exists(self, ami_id=None):
         # checks if given ami id image exists
@@ -34,12 +37,14 @@ class zeroDowntimeDeploy(object):
                 log.error("Invalid ami id! : " + str(ami_id))
             elif e.response['Error']['Code'] == "InvalidAMIID.NotFound":
                 log.error("AMI Id doesn't exist!")
+            elif e.response['Error']['Code'] == "AuthFailure":
+                log.error("Access ID/Access Key is invalid")
             else:
                 log.error("Exception found : "+ str(e))
             return False
         return True
 
-    def create_instances_with_ami(self, ami_id=None, instance_type="t2.micro", min_instance=1, max_instance=1, keypair=key_name, avaibility_zone=None, subnet_id=None):
+    def create_instances_with_ami(self, ami_id=None, instance_type="t2.micro", min_instance=1, max_instance=1, avaibility_zone=None, subnet_id=None):
         try:
             # create a new EC2 instance
             instances = self.client.run_instances(ImageId=ami_id, MinCount=min_instance, MaxCount=max_instance,\
@@ -183,6 +188,10 @@ if __name__ == "__main__":
         log.debug("Count : " + str(len(old_instances)))
         log.error("Old instance ids : " + str(old_instances))
 
+        if len(old_instances) == 0:
+            log.error("Instances with old ami not found!")
+            exit()
+
         log.info("***** Get avaibility zones and Subnet ids of old ami instances! *****")
         avaibility_zones = zdp.get_availibility_zones_with_subnet(args.old_ami)
         log.error("All avaibility zones : " + str(avaibility_zones))
@@ -217,6 +226,8 @@ if __name__ == "__main__":
         log.info("***** Verify that new setup works! *****")
         # some verification script or request to be called through public
         # internet and response should be checked!
+    except EndpointConnectionError:
+        log.error("***** ERROR *****\nFailed to execute the script successfully : Invalid region entered")
     except Exception as e:
         log.error("***** ERROR *****\nFailed to execute the script successfully : " + str(e))
         exit()
