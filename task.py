@@ -39,7 +39,7 @@ class zeroDowntimeDeploy(object):
             return False
         return True
 
-    def create_instances_with_ami(self, ami_id=None, instance_type="t2.micro", min_instance=1, max_instance=1, keypair=key_name, avaibility_zone=None, subnet_id=None):
+    def create_instances_with_ami(self, ami_id=None, instance_type="t2.micro", min_instance=1, max_instance=1, avaibility_zone=None, subnet_id=None):
         try:
             # create a new EC2 instance
             instances = self.client.run_instances(ImageId=ami_id, MinCount=min_instance, MaxCount=max_instance,\
